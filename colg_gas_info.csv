@@ -1,0 +1,31 @@
+Company/Institution;Name;Propellant;Thrust (mN);Power (W);T/P (mN/W);Dry mass (g);Isp (s)
+SSTL;SNAP 1;Liq. Butane;46;;;-;43
+UTIAS-SFL;CNAPS;SF6;50;;-;260;45
+SFL;NANOPS;SF6;35;;-;480;46.7
+Microspace Rapid;POPSAT-HIP1;Argon;1;;-;-;43
+GOM Space;MEMS Cold gas;Liq. Butane;1;;-;300;50
+GOM Space;NanoProp 6DOF;Liq. Butane;1;;-;682;50
+GOM Space;NanoProp 2000;Liq. Butane;1;;-;380;50
+GOM Space;NanoProp CGP3;Liq. Butane;1;;-;300;60
+GOM Space;NanoProp 6U;Liq. Butane;1;;-;770;60
+VACCO;CPOD;R134a;25;;-;770;40
+VACCO;MEPSI MiPS;Isobutane;53;;-;456;65
+VACCO;MarCO MiPS;R236fa;25;;-;;-
+VACCO;NEA Scout MiPS;R236fa;25;;-;1263;39.8
+VACCO;MiPS;R134a;10;;-;625;40
+VACCO;AFRLPUC;SO2;4.5;;-;835;46
+VACCO;Palomar MiPS;Isobutane;35;;-;890;50.1
+VACCO;CuSP;R134a/R236fa;25;;;513;-
+VACCO;Standard MiPS;R236fa;25;;-;1144;40
+MOOG;058 E143;Nitrogen;10;;-;-;60
+Marotta Controls;SV14;Nitrogen;10;;-;-;70
+Advanced Space Technologies;CGT;Nitrogen;42;;-;-;69
+Nammo;SVT01;Nitrogen;10;;-;-;72
+Aerospace Co.;MEPSI;Xenon;0.1;;-;188;30
+Lightsey Space Research;BioSentinel;R236fa;40;;-;1080;40.7
+NanoSpace;CubeProp;...;0.1;;-;115;75
+Univ. of Toronto;NANOPS;...;50;;-;-;45
+TNO-TU Delft;T3uPS;Nitrogen;6;;-;-;68
+Univ. of Texas;Bevo-2;R236fa;110.8;;-;290;65
+Univ. of Texas;3D Printed Cold Gas;R236fa;35;;-;-;55.4
+Univ. of Texas;Custom Cold Gas;R236fa;110;;-;290;64
