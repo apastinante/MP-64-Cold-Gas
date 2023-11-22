@@ -11,7 +11,7 @@ class req_generator():
     def __init__(self, c_mass, c_power, Cd, orbit_alt, lifetime, rad_orbit_acc, v_orbit_acc, lifetime_acc, c_surface_area, dens):
         self.mass = c_mass
         self.power = c_power
-        self.propulsion_per = 0.3 # fraction of total mass
+        self.propulsion_per = 0.7 # fraction of total mass
         self.Cd = Cd
         self.orbit_alt = orbit_alt *1000 # convert to meters
         self.orbit_rad = (orbit_alt + earth_radius)*1000 # convert to meters
@@ -106,17 +106,17 @@ def calc_cd(gamma, Re_t_mod):
         discharge_factor = 1 - ((gamma+1)/2)**0.75 * (3.266 - 2.128/(gamma+1))*Re_t_mod**-0.5 + 0.9428*(gamma-1)*(gamma+2)/(gamma+1)**0.5 * Re_t_mod**-1
         return discharge_factor
 
-def calc_mass(R_t,rho,sigma,epsilon,alpha,pc,t_tanks, t_tanc, R_tank, L_tank):   
+def calc_mass(R_t,rho,sigma,epsilon,alpha,pc,t_tanks, t_tankc, R_tank, L_tank,rho_tank):   
         # Calculate the mass of all the components
 
         # Calculate the mass of the tank
-        m_tank = 4*np.pi*R_tank**2 *rho *t_tanks + 2*np.pi*R_tank *rho *t_tanc *L_tank
+        m_tank = 4*np.pi*R_tank**2 *rho_tank *t_tanks + 2*np.pi*R_tank *rho_tank *t_tankc *L_tank
         m_nozzle = 2*np.pi*rho/sigma * 4 * (R_t**2*np.pi*(epsilon-1)/np.sin(alpha) * 0.5* pc*5e-3)
         m_chamber = 2* m_nozzle 
         m_feed = 2* 0.249 *2*m_chamber
         m_support =  2* 0.1 * (m_chamber +m_nozzle + m_feed +m_tank)
     #     # Calculate the thrust coefficient using the equation
-        return m_tank + m_nozzle + m_chamber + m_feed + m_support
+        return m_tank + m_nozzle + m_chamber + m_feed + m_support ,  m_tank
 
 
 
@@ -177,6 +177,8 @@ dens_300 = 1.95e-11 # kg/m^3
 dens_500 = 7.3e-13 # kg/m^3
 dens_300_max = 1.71e-10 # kg/m^3
 
+
+
 # Define cubesat parameters (3U)
 c_drag_coeff = 2.2
 c_surface_area = 0.03 # m^2
@@ -190,7 +192,7 @@ power_use = 0.4 # fraction of total power
 # Compute the requirements
 #def __init__(self, mass, c_power, Cd, orbit_alt, lifetime, rad_orbit_acc, v_orbit_acc, lifetime_acc):
 
-reqs = req_generator(c_mass[0], c_av_power, c_drag_coeff, 300, 6, 3, 20, 1, c_surface_area, dens_300)
+reqs = req_generator(c_mass[1], c_av_power, c_drag_coeff, 300, 6, 3, 20, 1, c_surface_area, dens_300)
 reqs.compute_dv()
 reqs.compute_thrust_req()
 thrusts = np.linspace(1, 100, 1000)/1000 # convert to mN
@@ -200,12 +202,18 @@ dry_mass = reqs.compute_isp_req(Isp) * 1000 # convert to grams
 prop_mass = c_mass[0]*(np.exp(reqs.dv/(9.80665*Isp)) - 1)/np.exp(reqs.dv/(9.80665*Isp)) *1000
 
 response_time = reqs.dv_err*reqs.mass/(0.5*1e-3)
+response_time = 5e-3 #s
+
+maximum_thrust = reqs.dv_man*reqs.mass/(response_time)
+
+print('The maximum thrust is: ', np.round(maximum_thrust*1000,5), ' mN')
+
 print('The required thrust is: ', np.round(reqs.thrust_req*1000,5), ' mN')
 print('The delta-v error is: ', reqs.dv_err, ' m/s')
 print('The required response time is: ', np.round(response_time,2), ' s')
 
 #Find where the dry mass is 0 
-index = np.where(dry_mass<250)
+index = np.where(dry_mass<1000)
 ind = index[0][-1]
 
 min_isp = Isp[index[0][-1]]
@@ -330,17 +338,27 @@ ultimate_strength = 505e6 # Pa
 modulus_elasticity = 200e9 # Pa
 poisson_ratio = 0.3
 
+# Define material properties for Ti-6Al-4V
+density_t = 4430 # kg/m^3
+yield_strength_t = 880e6 # Pa
+ultimate_strength_t = 950e6 # Pa
+modulus_elasticity_t = 113e9 # Pa
+poisson_ratio_t = 0.34
+
+
 
 div_angles = np.array([15,20])* np.pi/180 # rad
 div_loss = 1- (1-np.cos(div_angles))/2 # divergence losses
 
 # Define constants and parameters
-V_tank = 1*0.1*0.1*0.1 # m^3 (1.3U)
+u_param = 2 # U's of volume
+V_tank = u_param*0.1*0.1*0.1 # m^3 (1.3U)
 
-R_tank = 9/200 # m
+R_tank = 10/200 # m
 
 # Assume cylindrical tank with hemispherical ends
 # Length
+L_tank = (V_tank-4/3 *np.pi *R_tank**3)/(np.pi*R_tank**2) # m
 
 r_l = 12.5e-6 # m 
 
@@ -354,15 +372,20 @@ incorr_vals_20 = []
 incorr_vals_15_complete = []
 incorr_vals_20_complete = []
 
+incorr_vals_15_complete_tank = []
+incorr_vals_20_complete_tank = []
 
-Isps = np.linspace(30, 76.5, 100)
-pressures = np.linspace(0.1, 3, 100) * 1e5 # Pa
+Isps = np.linspace(min_isp, 0.8*props['Nitrogen'][2], 100)
+pressures = np.linspace(0.1, 20, 500) * 1e5 # Pa
 for pc in pressures:
     for isp in Isps:
         for i,div_angle in enumerate(div_angles):
-            V_tank = 1*0.1*0.1*0.1 # m^3 (1.3U)
-            R_tank = 9/200 
-            L_tank = (V_tank-4/3 *np.pi *R_tank**3)/(np.pi*R_tank**2) # m
+            v_list15 = []
+            v_list20 = []
+
+            # V_tank = u_param*0.1*0.1*0.1 # m^3 
+            # R_tank = 9/200 
+            # L_tank = (V_tank-4/3 *np.pi *R_tank**3)/(np.pi*R_tank**2) # m
 
             # Calculate the required mass of propellant
             prop_mass_req = c_mass[1]*(np.exp(reqs.dv/(9.80665*isp)) - 1)/np.exp(reqs.dv/(9.80665*isp))
@@ -403,8 +426,8 @@ for pc in pressures:
 
             except:
                 flag = 0
-                print('The pressure ratio is not real or nan at pressure: ', pc, ' and Isp: ', isp)
-                print(gamma,rho)
+                # print('The pressure ratio is not real or nan at pressure: ', pc, ' and Isp: ', isp)
+                # print(gamma,rho)
                 incorr_vals_15.append([pc, isp, flag])
                 incorr_vals_20.append([pc, isp, flag])
                 continue
@@ -451,7 +474,12 @@ for pc in pressures:
             Cd = calc_cd(gamma, Re_t_mod)
 
             
+            # Calculate the change in R_t
+            R_t_mod = R_t/(Cd)**0.5
 
+            R_t = R_t_mod
+
+            R_e = R_t * np.sqrt(expansion_ratio)
             
 
             pipes = piping(v, 26.7e-3, 1.6e-3, rho, mu)
@@ -460,12 +488,29 @@ for pc in pressures:
             # Calculate the pressure drop in the piping and valve
             deltap = pipes.deltap
             
-            for F in np.linspace(0.7, 0.9, 30): # Evaluate the tank fill fraction 
-                # Calculate the pressure at the tank
-                m_gas = (pc+deltap)*V_tank/(R_helium*temp)
-                p_init = (pc+deltap)/(1-F)
-                t_tank_sph = p_init*R_tank/(yield_strength/2)
-                t_tank_cyl = p_init*R_tank/(yield_strength/4)
+            # for F in np.linspace(0.7, 0.9, 30): # Evaluate the tank fill fraction 
+            # Calculate the pressure at the tank
+            p_final = pc + deltap
+            
+            # Loop over volumes to find the correct tank size
+            for u_param in np.linspace(1, 2, 10):
+                # Calculate the tank volume
+                V_tank = u_param*0.1*0.1*0.1 # m^3 (1.3U)
+                R_tank = 8.5/200 # m
+
+                # Assume cylindrical tank with hemispherical ends
+                # Length
+                L_tank = (V_tank-4/3 *np.pi *R_tank**3)/(np.pi*R_tank**2) # m
+
+                #Solve for the fill fraction: 
+                F = (prop_mass_req*R_nitrogen*temp/V_tank)/(p_final + prop_mass_req*R_nitrogen*temp/V_tank)
+
+                p_init = prop_mass_req/(F*V_tank) *(R_nitrogen*temp)
+            
+
+                m_gas = p_final*V_tank/(R_helium*temp)
+                t_tank_sph = p_init*R_tank/(2*yield_strength_t/3)
+                t_tank_cyl = p_init*R_tank/(yield_strength_t/3)
 
                 # Make sure the tank thickness is achievable, otherwise increase it
                 if t_tank_cyl<0.5/1000:
@@ -473,48 +518,65 @@ for pc in pressures:
                 if t_tank_sph < 0.5/1000:
                     t_tank_sph = 0.5/1000
 
-
-                if t_tank_cyl==0.5/1000 and t_tank_sph == 0.5/1000:
-                    R_tank = np.sqrt((prop_mass_req*R_nitrogen*temp*4)/(4/3 *np.pi * yield_strength))
-                    L_tank = 0
-
-                    p_init = prop_mass_req/(4/3 *np.pi*R_tank**3) *(R_nitrogen*temp)
-                    
-
                 
+                # Calculate the dry mass of the system 
 
-                    # Calculate the change in R_t
-                    R_t_mod = R_t/(Cd)**0.5
+                d_mass , m_tank = calc_mass(R_t,density,yield_strength,expansion_ratio,div_angle,pc,t_tank_sph, t_tank_cyl, R_tank, L_tank, density_t) # convert to grams
 
-                    R_t = R_t_mod
+                d_mass = d_mass*1000 # convert to grams
+                m_tank = m_tank*1000 # convert to grams
 
-                    R_e = R_t * np.sqrt(expansion_ratio)
-
-                    # Calculate the dry mass of the system
-                    d_mass = calc_mass(R_t,density,yield_strength,expansion_ratio,div_angle,p_init,t_tank_sph, t_tank_cyl, R_tank, L_tank)*1000 + 6*4.7 
-                else:
-
-                    # Calculate the change in R_t
-                    R_t_mod = R_t/(Cd)**0.5
-
-                    R_t = R_t_mod
-
-                    R_e = R_t * np.sqrt(expansion_ratio)
-                    # Calculate the dry mass of the system 
-                    d_mass = calc_mass(R_t,density,yield_strength,expansion_ratio,div_angle,pc,t_tank_sph, t_tank_cyl, R_tank, L_tank)*1000 + 6*4.7 # convert to grams
+                d_mass += 6*4.7 # add valve 
 
                 total_mass = d_mass + prop_mass_req*1000  + m_gas*1000
-                
-                if total_mass > 0.3*c_mass[1]*1000:
+                if i == 0:
+                    v_list15.append([pc, isp, total_mass, d_mass ,m_flow_req, v, t_tank_cyl*1000, t_tank_sph*1000 ,R_t*1000, R_e*1000, p_ratio, expansion_ratio, Cd, deltap, m_gas*1000, F, div_angle, prop_mass_req,p_init, L_tank,V_tank])
+                else:
+                    v_list20.append([pc, isp, total_mass, d_mass ,m_flow_req, v, t_tank_cyl*1000, t_tank_sph*1000 ,R_t*1000, R_e*1000, p_ratio, expansion_ratio, Cd, deltap, m_gas*1000, F, div_angle, prop_mass_req,p_init, L_tank,V_tank])
+
+            # Find the indice in the list which satisfy the size requirements
+            if i == 0:
+                ind_real_15 = np.where(np.array(R_tank + np.array(v_list15)[:,6]/1000 < 10/200))
+
+                # If the list is empty then then move to next iteration
+                if len(ind_real_15[0]) == 0:
                     flag = 3
-                    incorr_vals_15_complete.append([pc, isp, flag, F, total_mass, d_mass, prop_mass_req*1000, m_gas*1000 , p_ratio ])
-                    incorr_vals_20_complete.append([pc, isp, flag, F, total_mass, d_mass, prop_mass_req*1000, m_gas*1000 , p_ratio ])
+                    incorr_vals_15.append([pc, isp, flag])
                     continue
                 
-                elif div_angle == div_angles[0]:
-                    corr_vals_15.append([pc, isp, total_mass, d_mass ,m_flow_req, v, t_tank_cyl*1000, t_tank_sph*1000 ,R_t*1000, R_e*1000, p_ratio, expansion_ratio, Cd, deltap, m_gas*1000, F, div_angle, prop_mass_req,p_init, R_tank])
+                # If the list is not empty then find the minimum total mass
+                ind_min_dummy = np.where(np.array(v_list15)[ind_real_15[0],2]==np.min(np.array(v_list15)[ind_real_15[0],2]))
+                ind_min_15 = int(ind_real_15[0][0])
+                total_mass = np.min(np.array(v_list15)[ind_real_15[0],2])
+                
+                
+            else:
+                ind_real_20 = np.where(np.array(R_tank + np.array(v_list20)[:,6]/1000 < 10/200))
+
+                # If the list is empty then then move to next iteration
+                if len(ind_real_20[0]) == 0:
+                    flag = 3
+                    incorr_vals_20.append([pc, isp, flag])
+                    continue
+
+                # If the list is not empty then find the minimum total mass
+                ind_min_dummy = np.where(np.array(v_list20)[ind_real_20[0],2]==np.min(np.array(v_list20)[ind_real_20[0],2]))
+                ind_min_20 = int(ind_real_20[0][0])
+                total_mass = v_list20[ind_min_20][2]
+
+
+            if total_mass > 0.65*c_mass[1]*1000:
+                if i == 0: 
+                    incorr_vals_15_complete.append(v_list15[ind_min_15])
                 else:
-                    corr_vals_20.append([pc, isp, total_mass, d_mass ,m_flow_req, v, t_tank_cyl*1000, t_tank_sph*1000 ,R_t*1000, R_e*1000, p_ratio, expansion_ratio, Cd, deltap, m_gas*1000, F, div_angle, prop_mass_req, p_init, R_tank])
+                    incorr_vals_20_complete.append(v_list20[ind_min_20])
+
+                continue
+            
+            elif i == 0:
+                corr_vals_15.append(v_list15[ind_min_15])
+            else:
+                corr_vals_20.append(v_list20[ind_min_20])
 
 
 
@@ -564,6 +626,8 @@ corr_vals_15 = corr_vals_15_arr
 corr_vals_20 = corr_vals_20_arr
 incorr_vals_15 = incorr_vals_15_arr
 incorr_vals_20 = incorr_vals_20_arr
+incorr_vals_15_complete_tank = np.array(incorr_vals_15_complete_tank)
+incorr_vals_20_complete_tank = np.array(incorr_vals_20_complete_tank)
 
 
 
@@ -579,7 +643,7 @@ incorr_vals_20 = incorr_vals_20_arr
 ind_flag_0 = np.where(incorr_vals_15[:,2]==0)
 ind_flag_1 = np.where(incorr_vals_15[:,2]==1)
 ind_flag_2 = np.where(incorr_vals_15[:,2]==2)
-
+ind_flag_3 = np.where(incorr_vals_15[:,2]==3)
 
 
 # Find the minimum total mass for each divergence angle for the incorrect designs
@@ -608,31 +672,33 @@ ind_flag_2 = np.where(incorr_vals_15[:,2]==2)
 
 
 plt.scatter(incorr_vals_15[ind_flag_0,0], incorr_vals_15[ind_flag_0,1], color='blue', label='Unachievable exit velocty')
-plt.scatter(incorr_vals_15[ind_flag_1,0], incorr_vals_15[ind_flag_1,1], color='purple', label='Velocity too high')
-plt.scatter(incorr_vals_15[ind_flag_2,0], incorr_vals_15[ind_flag_2,1], color='red', label='Throat radius too small')
+# plt.scatter(incorr_vals_15[ind_flag_1,0], incorr_vals_15[ind_flag_1,1], color='purple', label='Velocity too high')
+# plt.scatter(incorr_vals_15[ind_flag_2,0], incorr_vals_15[ind_flag_2,1], color='red', label='Throat radius too small')
+# plt.scatter(incorr_vals_15[ind_flag_3,0], incorr_vals_15[ind_flag_3,1], color='red', label='Tank too large')
 plt.scatter(incorr_vals_15_complete_arr[:,0], incorr_vals_15_complete_arr[:,1], color='orange', label='Dry mass too high')
 plt.scatter(corr_vals_15_arr[:,0], corr_vals_15_arr[:,1], color='green', label='Feasible design')
 plt.xlabel('Pressure [Pa]')
 plt.ylabel('Isp [s]')
 plt.title('Incorrect designs for divergence angle of 15 degrees')
-plt.legend()
+plt.legend(loc='lower left')
 plt.grid()
 plt.show()
 
-# ind_flag_0 = np.where(incorr_vals_20[:,2]==0)
-# ind_flag_1 = np.where(incorr_vals_20[:,2]==1)
-# ind_flag_2 = np.where(incorr_vals_20[:,2]==2)
-# ind_flag_3 = np.where(incorr_vals_20[:,2]==3)
+ind_flag_0 = np.where(incorr_vals_20[:,2]==0)
+ind_flag_1 = np.where(incorr_vals_20[:,2]==1)
+ind_flag_2 = np.where(incorr_vals_20[:,2]==2)
+ind_flag_3 = np.where(incorr_vals_20[:,2]==3)
 
 plt.scatter(incorr_vals_20[ind_flag_0,0], incorr_vals_20[ind_flag_0,1], color='blue', label='Unachievable exit velocty')
 # plt.scatter(incorr_vals_20[ind_flag_1,0], incorr_vals_20[ind_flag_1,1], color='red', label='Velocity too high')
 # plt.scatter(incorr_vals_20[ind_flag_2,0], incorr_vals_20[ind_flag_2,1], color='orange', label='Throat radius too small')
+# plt.scatter(incorr_vals_20[ind_flag_3,0], incorr_vals_20[ind_flag_3,1], color='red', label='Tank too large')
 plt.scatter(incorr_vals_20_complete_arr[:,0], incorr_vals_20_complete_arr[:,1], color='orange', label='Dry mass too high')
 plt.scatter(corr_vals_20_arr[:,0], corr_vals_20_arr[:,1], color='green', label='Feasible design')
 plt.xlabel('Pressure [Pa]')
 plt.ylabel('Isp [s]')
 plt.title('Incorrect designs for divergence angle of 20 degrees')
-plt.legend()
+plt.legend(loc='lower left')
 plt.grid()
 plt.show()
 
@@ -770,8 +836,10 @@ print('Pressure drop: ', corr_vals_15[ind_15[0][0],13], ' Pa')
 print('Gas mass: ', corr_vals_15[ind_15[0][0],14], ' g')
 print('Fill fraction: ', corr_vals_15[ind_15[0][0],15])
 print("Length of nozzle:", (corr_vals_15[ind_15[0][0],9] - corr_vals_15[ind_15[0][0],8])/np.tan(15*np.pi/180), 'mm')
-print('Initial Pressure in tank:', corr_vals_15[ind_15[0][0],-2] , 'Pa')
-print("Tank radius:", corr_vals_15[ind_15[0][0],-1] , 'm') # R_tank
+print('Initial Pressure in tank:', corr_vals_15[ind_15[0][0],-3] , 'Pa')
+print("Tank length:", corr_vals_15[ind_15[0][0],-2]*1000 , 'mm') # L_tank
+print("Tank volume:", corr_vals_15[ind_15[0][0],-1]/0.1**3 , 'U') # V_tank
+
       
 
 
@@ -794,8 +862,9 @@ print('Pressure drop: ', corr_vals_20[ind_20[0][0],13], ' Pa')
 print('Gas mass: ', corr_vals_20[ind_20[0][0],14], ' g')
 print('Fill fraction: ', corr_vals_20[ind_20[0][0],15])
 print("Length of nozzle:", (corr_vals_20[ind_20[0][0],9] - corr_vals_20[ind_20[0][0],8])/np.tan(20*np.pi/180), 'mm')
-print('Initial Pressure in tank:', corr_vals_20[ind_20[0][0],-2] , 'Pa')
-print("Tank radius:", corr_vals_20[ind_20[0][0],-1] , 'm') # R_tank
+print('Initial Pressure in tank:', corr_vals_20[ind_20[0][0],-3] , 'Pa')
+print("Tank length:", corr_vals_20[ind_20[0][0],-2] *100 , 'mm') # R_tank
+print("Tank volume:", corr_vals_20[ind_20[0][0],-1]/0.1**3 , 'U') # V_tank
 
 
 
